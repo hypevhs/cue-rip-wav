@@ -5,7 +5,7 @@ import sys
 import wave
 
 isoFilename = sys.argv[1]
-offsetSamples = 8582
+offsetSamples = 8000
 
 print(("Using an offset of {0} samples " +
 	"({1} bytes at stereo and 16 bits)").format(
@@ -21,27 +21,41 @@ def timecodeToBytes(timecode):
 	samples = int(totalSecs*44100) + offsetSamples
 	return int(samples*2*2) # stereo@2 bytes per seconds
 
-isoFile = open(isoFilename, "rb")
-thisTrackLoc = None
-trackNum = 1
-for line in sys.stdin:
-	if thisTrackLoc == None:
-		thisTrackLoc = timecodeToBytes(line)
-		continue
-	nextTrackLoc = timecodeToBytes(line)
-	isoFile.seek(thisTrackLoc)
-	bytes = isoFile.read(nextTrackLoc - thisTrackLoc)
+def extractTrack(isoFile, bFrom, bTo, trackNum):
+	isoFile.seek(bFrom)
+	bytes = isoFile.read(bTo - bFrom)
 	
 	print("Track {0} from {1} to {2}".format(
-		trackNum, thisTrackLoc/4, nextTrackLoc/4))
+		trackNum, bFrom/4, bTo/4))
 	
-	thisTrackLoc = nextTrackLoc
-	
-	wf = wave.open("Track {0}.wav".format(trackNum),"w")
+	wf = wave.open("Track {0}.wav".format(trackNum), "w")
 	wf.setnchannels(2)
 	wf.setsampwidth(2)
 	wf.setframerate(44100)
 	wf.writeframes(bytes)
 	wf.close()
-	
-	trackNum += 1
+
+def getSize(fileobject):
+    fileobject.seek(0,2) # move the cursor to the end of the file
+    size = fileobject.tell()
+    return size
+
+def main():
+	isoFile = open(isoFilename, "rb")
+	thisTrackLoc = None
+	trackNum = 1
+	for line in sys.stdin:
+		if thisTrackLoc == None:
+			thisTrackLoc = timecodeToBytes(line)
+			continue
+		nextTrackLoc = timecodeToBytes(line)
+		
+		extractTrack(isoFile, thisTrackLoc, nextTrackLoc, trackNum)
+		
+		thisTrackLoc = nextTrackLoc
+		trackNum += 1
+	# last track doesn't have an end marker, extract the rest of the bytes
+	extractTrack(isoFile, thisTrackLoc, getSize(isoFile), trackNum)
+
+if __name__ == "__main__":
+	main()
